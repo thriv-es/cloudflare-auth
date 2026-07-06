@@ -2,12 +2,12 @@
 
 ## Plan status
 
-Overall status: todo
+Overall status: doing
 
 | Phase | Title | Status |
 | ----- | ----------------------------------- | ------ |
-| 0 | Fixes and groundwork | todo |
-| 1 | Native Cloudflare Email binding | todo |
+| 0 | Fixes and groundwork | done |
+| 1 | Native Cloudflare Email binding | done |
 | 2 | Auth email flow parity | todo |
 | 3 | Template upgrade and admin UI | todo |
 | 4 | One-click deploy integration | todo |

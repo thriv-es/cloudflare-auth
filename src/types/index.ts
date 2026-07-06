@@ -2,6 +2,8 @@
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  EMAIL?: any; // Cloudflare send_email binding (SendEmail)
+  EMAIL_FROM?: string; // Default from address for the binding
   ADMIN_SESSION_SECRET?: string;
   ENCRYPTION_KEY?: string;
   ADMIN_DOMAIN?: string;
@@ -21,19 +23,20 @@ export interface SystemSettings {
   keep_logs: boolean;
 }
 
-export type EmailProviderType = 
-  | 'sendgrid' 
-  | 'postmark' 
-  | 'mailgun' 
-  | 'brevo' 
-  | 'mailersend' 
-  | 'mailchimp' 
-  | 'mailjet' 
-  | 'smtp2go' 
-  | 'mailtrap' 
+export type EmailProviderType =
+  | 'sendgrid'
+  | 'postmark'
+  | 'mailgun'
+  | 'brevo'
+  | 'mailersend'
+  | 'mailchimp'
+  | 'mailjet'
+  | 'smtp2go'
+  | 'mailtrap'
   | 'resend'
   | 'smtp'
   | 'cloudflare'
+  | 'cloudflare_binding'
   | 'custom';
 
 export interface EmailProvider {
@@ -51,13 +54,14 @@ export interface EmailProvider {
   updatedAt: string;
 }
 
-export type EmailTemplateType = 
-  | 'welcome' 
-  | 'confirmation' 
-  | 'password_reset' 
-  | 'magic_link' 
-  | 'email_change' 
-  | 'otp';
+export type EmailTemplateType =
+  | 'welcome'
+  | 'confirmation'
+  | 'password_reset'
+  | 'magic_link'
+  | 'email_change'
+  | 'otp'
+  | 'invite';
 
 export interface EmailTemplate {
   id: string;

@@ -17,6 +17,28 @@ ADMIN_SESSION_SECRET=your_admin_session_secret_here
 ENCRYPTION_KEY=your_base64_encoded_32_byte_encryption_key_here
 
 # =============================================================================
+# EMAIL CONFIGURATION
+# =============================================================================
+#
+# The Cloudflare Email Service binding (see wrangler.toml [[send_email]])
+# is the zero-config default for sending. To override the default from
+# address (otherwise the binding's own default is used), set:
+#
+# EMAIL_FROM=noreply@yourdomain.com
+#
+# Optional legacy SendGrid path (deprecated; remove in release 2):
+# SENDGRID_API_KEY=your_sendgrid_api_key
+# SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+# SENDGRID_TEMPLATE_CONFIRMATION=template_id
+# SENDGRID_TEMPLATE_PASSWORD_RESET=template_id
+# SENDGRID_TEMPLATE_WELCOME=template_id
+#
+# Optional cross-account Cloudflare REST sender (overrides the binding
+# when configured as the default provider in the admin UI):
+# CF_ACCOUNT_ID=your_cloudflare_account_id
+# CF_API_TOKEN=your_cloudflare_api_token
+
+# =============================================================================
 # SETUP INSTRUCTIONS
 # =============================================================================
 #

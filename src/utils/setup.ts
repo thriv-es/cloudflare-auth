@@ -443,7 +443,7 @@ END;
 CREATE TABLE IF NOT EXISTS email_templates (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     project_id TEXT REFERENCES projects(id) ON DELETE CASCADE, -- NULL for system-wide
-    type TEXT NOT NULL CHECK (type IN ('welcome', 'confirmation', 'password_reset', 'magic_link', 'email_change', 'otp')),
+    type TEXT NOT NULL CHECK (type IN ('welcome', 'confirmation', 'password_reset', 'magic_link', 'email_change', 'otp', 'invite')),
     subject TEXT NOT NULL,
     body_html TEXT NOT NULL,
     body_text TEXT,
@@ -466,7 +466,41 @@ INSERT OR IGNORE INTO email_templates (type, subject, body_html, body_text) VALU
 ('password_reset', 'Reset your password', '<h1>Reset Password</h1><p>Click <a href="{{action_url}}">here</a> to reset.</p>', 'Reset Password: {{action_url}}'),
 ('magic_link', 'Login to {{app_name}}', '<h1>Login</h1><p>Click <a href="{{action_url}}">here</a> to login.</p>', 'Login: {{action_url}}'),
 ('email_change', 'Verify new email', '<h1>Verify Email</h1><p>Click <a href="{{action_url}}">here</a> to verify.</p>', 'Verify Email: {{action_url}}'),
-('otp', 'Your verification code', '<h1>Code: {{otp}}</h1>', 'Your code is: {{otp}}');
+('otp', 'Your verification code', '<h1>Code: {{otp}}</h1>', 'Your code is: {{otp}}'),
+('invite', 'You''re invited to {{app_name}}', '<h1>You''re invited</h1><p>Click <a href="{{action_url}}">here</a> to accept your invitation.</p>', 'You''re invited to {{app_name}}. Accept: {{action_url}}');
+
+-- ============================================================
+-- ONE TIME TOKENS TABLE
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS one_time_tokens (
+    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    user_id TEXT,
+    email TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    token_type TEXT NOT NULL CHECK (token_type IN (
+        'confirmation', 'recovery', 'magic_link', 'email_change', 'otp', 'invite'
+    )),
+    payload TEXT,
+    expires_at INTEGER NOT NULL,
+    used_at INTEGER,
+    created_at INTEGER NOT NULL DEFAULT (cast(strftime('%s', 'now') as int)),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(project_id, user_id, token_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_one_time_tokens_hash
+    ON one_time_tokens(token_hash)
+    WHERE used_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_one_time_tokens_project_email_type
+    ON one_time_tokens(project_id, email, token_type)
+    WHERE used_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_one_time_tokens_expires
+    ON one_time_tokens(expires_at)
+    WHERE used_at IS NULL;
 `;
 
 export async function initializeDatabase(env: Env): Promise<void> {

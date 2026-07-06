@@ -89,13 +89,20 @@ export class EmailService {
       provider = await providerService.getFallbackProvider();
     }
 
+    // Zero-config default: use the Cloudflare send_email binding when no
+    // provider rows are configured. The binding is the recommended path
+    // because it needs no API keys or account IDs.
+    const useBinding = !provider && (env as any).EMAIL;
+    if (useBinding) {
+      return this.sendWithBinding(env, templateService, to, templateType, templateData, subject, projectId);
+    }
+
     if (!provider) {
       console.error('No email provider configured');
       throw new AppError(500, 'Email service not configured', 'EMAIL_SERVICE_NOT_CONFIGURED');
     }
 
     // 2. Get Template
-    // Map internal types to DB types
     const dbTemplateTypeMap: Record<string, 'confirmation' | 'password_reset' | 'welcome'> = {
       'confirmation': 'confirmation',
       'passwordReset': 'password_reset',
@@ -103,66 +110,85 @@ export class EmailService {
     };
 
     const dbType = dbTemplateTypeMap[templateType];
-    const template = await templateService.getTemplate(projectId || null, dbType);
+    const template = await this.resolveTemplate(templateService, projectId, dbType);
 
-    if (!template) {
-       // If using DB provider, we MUST have a DB template.
-       // Unless we want to fallback to hardcoded defaults?
-       // Let's fallback to hardcoded defaults if system template is missing.
-       console.warn(`Template ${dbType} not found for project ${projectId || 'system'}, using fallback`);
-       // We could implement hardcoded fallbacks here or throw.
-       // For now, let's throw to encourage setting up templates.
-       // Actually, the migration inserted default system templates, so this should be fine for system.
-       // If project specific is missing, it falls back to system (handled by getTemplate logic if we implemented it that way?
-       // No, getTemplate(projectId) returns project specific. If null, we should try getTemplate(null).
+    const html = this.renderTemplate(template.bodyHtml, templateData);
+    const text = template.bodyText ? this.renderTemplate(template.bodyText, templateData) : undefined;
+    const renderedSubject = this.renderTemplate(template.subject, templateData);
 
-       // Let's try system template if project one failed
-       let systemTemplate = null;
-       if (projectId) {
-         systemTemplate = await templateService.getTemplate(null, dbType);
-       }
+    const emailProvider = ProviderFactory.create(provider.provider, this.buildProviderConfig(provider, env));
+    await emailProvider.send({
+      to,
+      from: provider.fromEmail,
+      fromName: provider.fromName,
+      subject: renderedSubject,
+      html,
+      text,
+    });
+  }
 
-       if (!systemTemplate && !template) {
-          throw new AppError(500, `Email template ${dbType} not found`, 'EMAIL_TEMPLATE_NOT_FOUND');
-       }
-
-       // Use the one we found
-       const activeTemplate = template || systemTemplate;
-
-       if (activeTemplate) {
-         const html = this.renderTemplate(activeTemplate.bodyHtml, templateData);
-         const text = activeTemplate.bodyText ? this.renderTemplate(activeTemplate.bodyText, templateData) : undefined;
-         const renderedSubject = this.renderTemplate(activeTemplate.subject, templateData);
-
-         // 3. Send
-         const emailProvider = ProviderFactory.create(provider.provider, this.buildProviderConfig(provider, env));
-         await emailProvider.send({
-           to,
-           from: provider.fromEmail,
-           fromName: provider.fromName,
-           subject: renderedSubject,
-           html,
-           text
-         });
-         return;
-       }
-    } else {
-         const html = this.renderTemplate(template.bodyHtml, templateData);
-         const text = template.bodyText ? this.renderTemplate(template.bodyText, templateData) : undefined;
-         const renderedSubject = this.renderTemplate(template.subject, templateData);
-
-         // 3. Send
-         const emailProvider = ProviderFactory.create(provider.provider, this.buildProviderConfig(provider, env));
-         await emailProvider.send({
-           to,
-           from: provider.fromEmail,
-           fromName: provider.fromName,
-           subject: renderedSubject,
-           html,
-           text
-         });
-         return;
+  /**
+   * Resolve a project template or fall back to the system template.
+   * Throws EMAIL_TEMPLATE_NOT_FOUND if neither exists.
+   */
+  private async resolveTemplate(
+    templateService: EmailTemplateService,
+    projectId: string | undefined,
+    dbType: 'confirmation' | 'password_reset' | 'welcome'
+  ) {
+    let template = await templateService.getTemplate(projectId || null, dbType);
+    if (!template && projectId) {
+      template = await templateService.getTemplate(null, dbType);
     }
+    if (!template) {
+      throw new AppError(500, `Email template ${dbType} not found`, 'EMAIL_TEMPLATE_NOT_FOUND');
+    }
+    return template;
+  }
+
+  /**
+   * Send an email via the Cloudflare `send_email` binding.
+   *
+   * Used as the zero-config default when no provider row is configured.
+   * The from address comes from the `EMAIL_FROM` setting or falls back
+   * to the binding's own default.
+   */
+  private async sendWithBinding(
+    env: Env,
+    templateService: EmailTemplateService,
+    to: string,
+    templateType: 'confirmation' | 'passwordReset' | 'welcome',
+    templateData: Record<string, any>,
+    _subject: string,
+    projectId?: string
+  ): Promise<void> {
+    const dbTemplateTypeMap: Record<string, 'confirmation' | 'password_reset' | 'welcome'> = {
+      'confirmation': 'confirmation',
+      'passwordReset': 'password_reset',
+      'welcome': 'welcome'
+    };
+    const dbType = dbTemplateTypeMap[templateType];
+    const template = await this.resolveTemplate(templateService, projectId, dbType);
+
+    const html = this.renderTemplate(template.bodyHtml, templateData);
+    const text = template.bodyText ? this.renderTemplate(template.bodyText, templateData) : undefined;
+    const renderedSubject = this.renderTemplate(template.subject, templateData);
+
+    const fromEmail = (env as any).EMAIL_FROM as string | undefined ?? this.defaultFromEmail;
+    const fromName = (templateData.project_name as string) || (templateData.app_name as string) || undefined;
+
+    const provider = ProviderFactory.create('cloudflare_binding', {
+      binding: (env as any).EMAIL,
+    });
+
+    await provider.send({
+      to,
+      from: fromEmail,
+      fromName,
+      subject: renderedSubject,
+      html,
+      text,
+    });
   }
 
   /**

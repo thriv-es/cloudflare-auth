@@ -21,6 +21,12 @@ database_name = "auth-db"
 database_id = "3a5b083f-3c7a-4552-b938-3cd8ddafebec"
 migrations_dir = "migrations"
 
+# Cloudflare Email Service binding
+# Zero-config: needs no secrets. Onboard a sending domain once with:
+#   npx wrangler email sending enable yourdomain.com
+[[send_email]]
+name = "EMAIL"
+
 # Secrets (set these via wrangler secret put <SECRET_NAME>)
 # These are sensitive values that should NEVER be committed to version control
 #

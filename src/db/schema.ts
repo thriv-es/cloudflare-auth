@@ -310,6 +310,44 @@ export const passwordResetTokens = sqliteTable('password_reset_tokens', {
 }));
 
 // ============================================================
+// ONE TIME TOKENS
+// ============================================================
+// Unified token table for all link- and code-based auth flows:
+// confirmation, recovery (password reset), magic_link, email_change,
+// otp, and invite. Each row carries a `tokenType` discriminator so
+// flows cannot accept each other's tokens.
+
+export const oneTimeTokens = sqliteTable('one_time_tokens', {
+  id: text('id').primaryKey().$defaultFn(() => sql`${generateId}`),
+
+  projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  userId: text('user_id'),
+  email: text('email').notNull(),
+
+  tokenHash: text('token_hash').notNull(),
+  tokenType: text('token_type', {
+    enum: ['confirmation', 'recovery', 'magic_link', 'email_change', 'otp', 'invite'],
+  }).notNull(),
+
+  payload: text('payload'), // optional per-flow JSON payload
+
+  expiresAt: integer('expires_at').notNull(),
+  usedAt: integer('used_at'),
+  createdAt: integer('created_at').notNull().$defaultFn(() => sql`cast(strftime('%s', 'now') as int)`),
+
+  attempts: integer('attempts').notNull().default(0),
+}, (table) => ({
+  projectUserHashUnique: unique().on(table.projectId, table.userId, table.tokenHash),
+  tokenHashIdx: index('idx_one_time_tokens_hash').on(table.tokenHash),
+  projectEmailTypeIdx: index('idx_one_time_tokens_project_email_type').on(
+    table.projectId, table.email, table.tokenType
+  ),
+  expiresIdx: index('idx_one_time_tokens_expires').on(table.expiresAt),
+}));
+
+// ============================================================
+// USER TABLE METADATA
+// ============================================================
 // USER TABLE METADATA
 // ============================================================
 
@@ -356,3 +394,7 @@ export type InsertAdminSession = typeof adminSessions.$inferInsert;
 
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
+export type OneTimeToken = typeof oneTimeTokens.$inferSelect;
+export type InsertOneTimeToken = typeof oneTimeTokens.$inferInsert;
+export type OneTimeTokenType = OneTimeToken['tokenType'];

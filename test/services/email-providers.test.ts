@@ -51,13 +51,13 @@ describe('CloudflareEmailProvider', () => {
 
       const body = JSON.parse(options.body);
       expect(body.to).toBe('recipient@example.com');
-      expect(body.from).toBe('welcome@yourdomain.com');
+      expect(body.from).toEqual({ address: 'welcome@yourdomain.com', name: undefined });
       expect(body.subject).toBe('Welcome!');
       expect(body.html).toBe('<h1>Welcome!</h1>');
       expect(body.text).toBe('Welcome!');
     });
 
-    it('should use "Name <email>" format when fromName is present', async () => {
+    it('should send `from` as an object with address and name when fromName is present', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ success: true, errors: [], result: { delivered: [], permanent_bounces: [], queued: [] } }),
@@ -68,7 +68,7 @@ describe('CloudflareEmailProvider', () => {
       await provider.send({ ...mockMessage, fromName: 'My App' });
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.from).toBe('My App <welcome@yourdomain.com>');
+      expect(body.from).toEqual({ address: 'welcome@yourdomain.com', name: 'My App' });
     });
 
     it('should throw when HTTP response is not ok', async () => {
