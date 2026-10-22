@@ -103,66 +103,41 @@ export class EmailService {
     };
 
     const dbType = dbTemplateTypeMap[templateType];
-    const template = await templateService.getTemplate(projectId || null, dbType);
+    const template = await this.resolveTemplate(templateService, projectId, dbType);
 
-    if (!template) {
-       // If using DB provider, we MUST have a DB template.
-       // Unless we want to fallback to hardcoded defaults?
-       // Let's fallback to hardcoded defaults if system template is missing.
-       console.warn(`Template ${dbType} not found for project ${projectId || 'system'}, using fallback`);
-       // We could implement hardcoded fallbacks here or throw.
-       // For now, let's throw to encourage setting up templates.
-       // Actually, the migration inserted default system templates, so this should be fine for system.
-       // If project specific is missing, it falls back to system (handled by getTemplate logic if we implemented it that way?
-       // No, getTemplate(projectId) returns project specific. If null, we should try getTemplate(null).
+    const html = this.renderTemplate(template.bodyHtml, templateData);
+    const text = template.bodyText ? this.renderTemplate(template.bodyText, templateData) : undefined;
+    const renderedSubject = this.renderTemplate(template.subject, templateData);
 
-       // Let's try system template if project one failed
-       let systemTemplate = null;
-       if (projectId) {
-         systemTemplate = await templateService.getTemplate(null, dbType);
-       }
+    // 3. Send
+    const emailProvider = ProviderFactory.create(provider.provider, this.buildProviderConfig(provider, env));
+    await emailProvider.send({
+      to,
+      from: provider.fromEmail,
+      fromName: provider.fromName,
+      subject: renderedSubject,
+      html,
+      text,
+    });
+  }
 
-       if (!systemTemplate && !template) {
-          throw new AppError(500, `Email template ${dbType} not found`, 'EMAIL_TEMPLATE_NOT_FOUND');
-       }
-
-       // Use the one we found
-       const activeTemplate = template || systemTemplate;
-
-       if (activeTemplate) {
-         const html = this.renderTemplate(activeTemplate.bodyHtml, templateData);
-         const text = activeTemplate.bodyText ? this.renderTemplate(activeTemplate.bodyText, templateData) : undefined;
-         const renderedSubject = this.renderTemplate(activeTemplate.subject, templateData);
-
-         // 3. Send
-         const emailProvider = ProviderFactory.create(provider.provider, this.buildProviderConfig(provider, env));
-         await emailProvider.send({
-           to,
-           from: provider.fromEmail,
-           fromName: provider.fromName,
-           subject: renderedSubject,
-           html,
-           text
-         });
-         return;
-       }
-    } else {
-         const html = this.renderTemplate(template.bodyHtml, templateData);
-         const text = template.bodyText ? this.renderTemplate(template.bodyText, templateData) : undefined;
-         const renderedSubject = this.renderTemplate(template.subject, templateData);
-
-         // 3. Send
-         const emailProvider = ProviderFactory.create(provider.provider, this.buildProviderConfig(provider, env));
-         await emailProvider.send({
-           to,
-           from: provider.fromEmail,
-           fromName: provider.fromName,
-           subject: renderedSubject,
-           html,
-           text
-         });
-         return;
+  /**
+   * Resolve a project template or fall back to the system template.
+   * Throws EMAIL_TEMPLATE_NOT_FOUND if neither exists.
+   */
+  private async resolveTemplate(
+    templateService: EmailTemplateService,
+    projectId: string | undefined,
+    dbType: 'confirmation' | 'password_reset' | 'welcome'
+  ) {
+    let template = await templateService.getTemplate(projectId || null, dbType);
+    if (!template && projectId) {
+      template = await templateService.getTemplate(null, dbType);
     }
+    if (!template) {
+      throw new AppError(500, `Email template ${dbType} not found`, 'EMAIL_TEMPLATE_NOT_FOUND');
+    }
+    return template;
   }
 
   /**

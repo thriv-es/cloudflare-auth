@@ -539,7 +539,8 @@ app.post('/api/admin/projects/:projectId/users/:userId/resend-verification', adm
       c.env,
       user.email,
       project.name,
-      confirmationUrl
+      confirmationUrl,
+      projectId
     );
 
     // Record successful attempt
@@ -840,7 +841,8 @@ app.post('/api/auth/:projectId/register', async (c) => {
           c.env,
           result.user.email,
           project.name,
-          confirmationUrl
+          confirmationUrl,
+          projectId
         );
 
         // Log which URL source is being used
@@ -988,7 +990,7 @@ app.post('/api/auth/:projectId/forgot-password', async (c) => {
       const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
       // Send password reset email
-      await emailService.sendPasswordResetEmail(c.env, user.email, resetUrl, project.name);
+      await emailService.sendPasswordResetEmail(c.env, user.email, resetUrl, project.name, projectId);
 
       // Log which URL source is being used
       console.log('Password reset URL source:', project.siteUrl ? 'project.siteUrl' : 'PASSWORD_RESET_BASE_URL');
@@ -1113,7 +1115,9 @@ app.get('/api/auth/:projectId/confirm-email', async (c) => {
         await emailService.sendWelcomeEmail(
           c.env,
           email,
-          project.name
+          project.name,
+          undefined,
+          projectId
         );
 
         console.log('Welcome email sent to:', email);

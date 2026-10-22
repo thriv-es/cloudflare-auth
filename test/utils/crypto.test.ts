@@ -1,4 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+/**
+ * bcryptjs is pure JS, so the production work factor (12 rounds) costs
+ * ~500ms per hash here. That made this file alone account for ~90% of the
+ * whole suite's runtime while asserting nothing about the work factor.
+ * We keep the real bcrypt implementation — real hash format, real compare
+ * semantics — and only cap the number of rounds so the tests stay fast.
+ */
+vi.mock('bcryptjs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('bcryptjs')>();
+  const TEST_ROUNDS = 4; // bcrypt's minimum; ~12ms per hash
+  return {
+    ...actual,
+    hash: (password: string, salt: number | string) =>
+      actual.hash(
+        password,
+        typeof salt === 'number' ? Math.min(salt, TEST_ROUNDS) : TEST_ROUNDS
+      ),
+  };
+});
 import {
   generateJWTSecret,
   generateSessionToken,

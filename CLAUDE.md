@@ -89,6 +89,11 @@ describe('ServiceName', () => {
 - Mock external dependencies (D1, external APIs)
 - Use `createMockEnv()` helper for consistent environment mocking
 
+- **Do not let slow crypto run at production cost.** `hashPassword` uses bcrypt
+  cost 12 (~500ms per hash in pure-JS bcryptjs). Tests that need a hash should
+  mock `bcryptjs` with a capped work factor (see `test/utils/crypto.test.ts`)
+  rather than paying production cost on every run.
+
 ### Test Coverage Requirements
 
 - All exported functions MUST have tests
@@ -98,19 +103,26 @@ describe('ServiceName', () => {
 
 ## Running Tests
 
+`npm test` runs the suite **once and exits** — it is CI-safe and never hangs.
+Watch mode is a separate script, because vitest's `--watch` flag overrides the
+`run` subcommand and would leave the process alive forever.
+
 ```bash
-# Run all tests
+# Run all tests once, then exit
 npm test
 
-# Run tests with coverage
-npm test -- --coverage
+# Re-run on file changes (watch mode - never exits, press q to quit)
+npm run test:watch
 
-# Run tests in watch mode
-npm test -- --watch
+# Run tests with coverage
+npm run test:coverage
 
 # Run specific test file
 npm test -- test/utils/helpers.test.ts
 ```
+
+Do **not** use `npm test -- --watch`: vitest starts watching instead of running
+once, so the command appears to hang after the suite passes.
 
 ## CI/CD Requirements
 
@@ -122,3 +134,33 @@ All tests MUST pass before code can be merged. This includes:
 ## Integration Testing
 
 For external integrations (Google OAuth, SendGrid, etc.), use mocks in unit tests. End-to-end tests can use test credentials stored in environment variables.
+
+## OAuth `redirect_uri` contract
+
+**Do not "fix" the OAuth redirect handling to use a server-side configured URI.** The
+`redirect_uri` is deliberately **client-supplied** and is threaded verbatim through *both*
+Google requests:
+
+1. `GET /api/auth/:projectId/oauth/:provider?redirect_uri=...` → embedded in the Google
+   **authorization** request.
+2. `GET /api/auth/:projectId/oauth/:provider/callback?code=...&redirect_uri=...` → forwarded to
+   the Google **token** endpoint.
+
+Google requires the value to be byte-for-byte identical in both steps, and to exactly match an
+entry in the provider console's *Authorized redirect URIs* (no wildcards, no prefix matching).
+
+The registered URI is the **frontend application's** callback URL (e.g.
+`https://app.example.com/auth/google/callback`) — **not** this service's
+`/api/auth/:projectId/oauth/:provider/callback` endpoint, which returns JSON rather than
+redirecting the browser. This keeps the auth service's own URL out of every tenant's provider
+console, and lets each tenant point at its own frontend.
+
+Provider credentials are stored **per project** (`project_oauth_providers`, unique on
+`project_id` + `provider_name`), so each tenant can use its own Google OAuth client.
+
+Full setup guide, matching rules and troubleshooting:
+https://github.com/evilUrge/cloudflare-auth/wiki/Google-OAuth
+
+Known gaps in the current implementation (all documented in the wiki): `state` is never
+validated server-side, `redirect_uri` is not validated against an allowlist, `refreshToken`
+is a literal placeholder, and OAuth accounts cannot be linked to existing password accounts.
