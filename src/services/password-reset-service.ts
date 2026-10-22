@@ -238,10 +238,14 @@ export class PasswordResetService {
     // Mark token as used
     await this.useResetToken(env, tokenId);
 
-    // Log audit event
+    // Log audit event.
+    // The event type has to be one the audit_logs table accepts: the column
+    // carries a CHECK constraint and 'password_reset_confirm' is not on it,
+    // so the insert failed and took the whole reset down with it — after the
+    // password had already been changed and the token already spent.
     await auditService.logEvent(env, {
       projectId,
-      eventType: 'password_reset_confirm',
+      eventType: 'password_changed',
       eventStatus: 'success',
       userId,
       eventData: { email, method: 'reset_token' },
