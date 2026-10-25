@@ -1,4 +1,4 @@
-name = "auth"
+name = "cloudflare-auth"
 main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = [ "nodejs_compat" ]
@@ -18,7 +18,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "auth-db"
-database_id = "3a5b083f-3c7a-4552-b938-3cd8ddafebec"
+database_id = "1ffb1a8b-526a-4fcb-b172-901be16fcabc"
 migrations_dir = "migrations"
 
 # Secrets (set these via wrangler secret put <SECRET_NAME>)
