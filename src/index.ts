@@ -60,6 +60,34 @@ app.use('*', async (c, next) => {
 });
 
 // ============================================================
+// ROW HELPERS
+// ============================================================
+/**
+ * The per-project user tables are created with snake_case columns, but the
+ * User type is camelCase. The row readers hand back the raw row, so every
+ * camelCase property on it reads as undefined — which is how `/me` ended up
+ * answering without `emailVerified`, and how an account the admin panel
+ * showed as verified looked unconfirmed to a client.
+ *
+ * The admin UI reads the raw snake_case row, so the mapping is applied where
+ * the camelCase shape is expected rather than in the row readers themselves.
+ */
+function rowDisplayName(user: unknown): string | null {
+  const row = user as Record<string, unknown> | null;
+  return (row?.display_name as string) ?? null;
+}
+
+function rowEmailVerified(user: unknown): boolean {
+  const row = user as Record<string, unknown> | null;
+  return row?.email_verified === 1 || row?.email_verified === true;
+}
+
+function rowCreatedAt(user: unknown): string | null {
+  const row = user as Record<string, unknown> | null;
+  return (row?.created_at as string) ?? null;
+}
+
+// ============================================================
 // ROOT HANDLER
 // ============================================================
 // Redirect root to admin panel
@@ -404,7 +432,7 @@ app.get('/api/admin/projects/:projectId/users', adminAuthMiddleware, async (c) =
     const searchLower = search.toLowerCase();
     filteredUsers = users.filter(u =>
       u.email.toLowerCase().includes(searchLower) ||
-      u.displayName?.toLowerCase().includes(searchLower)
+      rowDisplayName(u)?.toLowerCase().includes(searchLower)
     );
   }
 
@@ -515,7 +543,7 @@ app.post('/api/admin/projects/:projectId/users/:userId/resend-verification', adm
     }
 
     // Check if email is already verified
-    if (user.emailVerified) {
+    if (rowEmailVerified(user)) {
       return c.json({ success: false, error: 'Email is already verified' }, 400 as any);
     }
 
@@ -872,7 +900,7 @@ app.post('/api/auth/:projectId/register', async (c) => {
       user: {
         id: result.user.id,
         email: result.user.email,
-        displayName: result.user.displayName,
+        displayName: rowDisplayName(result.user),
       },
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
@@ -894,7 +922,7 @@ app.post('/api/auth/:projectId/login', async (c) => {
       user: {
         id: result.user.id,
         email: result.user.email,
-        displayName: result.user.displayName,
+        displayName: rowDisplayName(result.user),
       },
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
@@ -911,10 +939,10 @@ app.get('/api/auth/:projectId/me', authMiddleware, async (c) => {
     data: {
       id: user.id,
       email: user.email,
-      displayName: user.displayName,
-      emailVerified: user.emailVerified,
+      displayName: rowDisplayName(user),
+      emailVerified: rowEmailVerified(user),
       status: user.status,
-      createdAt: user.createdAt,
+      createdAt: rowCreatedAt(user),
     },
   });
 });
@@ -1195,7 +1223,7 @@ app.get('/api/auth/:projectId/oauth/:provider/callback', async (c) => {
       user: {
         id: result.user.id,
         email: result.user.email,
-        displayName: result.user.displayName,
+        displayName: rowDisplayName(result.user),
       },
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
